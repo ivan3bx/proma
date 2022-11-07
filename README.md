@@ -21,9 +21,11 @@ Use "proma [command] --help" for more information about a command.
 ```
 
 ## Example: extracting links from saved bookmarks
+```bash
+./proma links --limit 2
+```
 
 ```json
-$ proma links --limit 2
 [
   {
     "profileName": "megmaker",
