@@ -7,6 +7,7 @@ require (
 	github.com/fatih/color v1.13.0
 	github.com/mattn/go-mastodon v0.0.5
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8
+	github.com/sirupsen/logrus v1.9.0
 	github.com/spf13/cobra v1.6.1
 	github.com/spf13/viper v1.14.0
 	golang.org/x/exp v0.0.0-20221106115401-f9659909a136
@@ -31,7 +32,7 @@ require (
 	github.com/subosito/gotenv v1.4.1 // indirect
 	github.com/tomnomnom/linkheader v0.0.0-20180905144013-02ca5825eb80 // indirect
 	golang.org/x/net v0.1.0 // indirect
-	golang.org/x/sys v0.1.0 // indirect
+	golang.org/x/sys v0.2.0 // indirect
 	golang.org/x/text v0.4.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect

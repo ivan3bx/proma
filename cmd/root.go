@@ -25,11 +25,19 @@ import (
 	"fmt"
 	"os"
 
+	log "github.com/sirupsen/logrus"
+
 	"github.com/mattn/go-mastodon"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"golang.org/x/exp/maps"
 )
+
+type LogFormatter struct{}
+
+func (f *LogFormatter) Format(entry *log.Entry) ([]byte, error) {
+	return []byte(fmt.Sprintf("%s\n", entry.Message)), nil
+}
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -56,7 +64,7 @@ var (
 	serverName string
 	cfgFile    string
 	verbose    bool
-	client     *mastodon.Client
+	mClient    *mastodon.Client
 )
 
 func init() {
@@ -64,7 +72,20 @@ func init() {
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose mode")
 	rootCmd.PersistentFlags().StringVarP(&serverName, "server", "s", "mastodon.social", "server name")
 
-	cobra.OnInitialize(initConfig)
+	cobra.OnInitialize(initLogging, initConfig)
+}
+
+func initLogging() {
+	if verbose {
+		log.SetFormatter(&log.TextFormatter{
+			DisableTimestamp: true,
+			PadLevelText:     true,
+		})
+		log.Info("Debug logs enabled")
+		log.SetLevel(log.DebugLevel)
+	} else {
+		log.SetFormatter(&LogFormatter{})
+	}
 }
 
 func initConfig() {
@@ -85,15 +106,15 @@ func initConfig() {
 	err := v.ReadInConfig()
 
 	if err != nil {
-		debugf("creating config file: %v", v.ConfigFileUsed())
+		log.Debugf("creating config file: %v", v.ConfigFileUsed())
 		cobra.CheckErr(v.SafeWriteConfig())
 	}
 
-	debugf("reading config file: %v", v.ConfigFileUsed())
+	log.Debugf("reading config file: %v", v.ConfigFileUsed())
 
 	if len(v.AllSettings()) > 0 && !rootCmd.Flags().Changed("server") {
 		serverName = maps.Keys(v.AllSettings())[0]
-		debug("using default serverName: ", serverName)
+		log.Info("using default serverName: ", serverName)
 	}
 
 	if v.InConfig(serverName) {
@@ -106,20 +127,8 @@ func initConfig() {
 			AccessToken:  configValues["accesstoken"],
 		}
 
-		client = mastodon.NewClient(clientConfig)
+		mClient = mastodon.NewClient(clientConfig)
 	} else {
-		fmt.Printf("Credentials missing for server '%s'\n\n", serverName)
-	}
-}
-
-func debug(a ...any) {
-	if verbose {
-		fmt.Println(a...)
-	}
-}
-
-func debugf(format string, a ...any) {
-	if verbose {
-		debug(fmt.Sprintf(format, a...))
+		log.Errorf("Credentials missing for server '%s'\n", serverName)
 	}
 }
