@@ -10,6 +10,8 @@ import (
 	"os"
 	"strings"
 
+	log "github.com/sirupsen/logrus"
+
 	"github.com/PuerkitoBio/goquery"
 	"github.com/mattn/go-mastodon"
 	"github.com/spf13/cobra"
@@ -29,7 +31,7 @@ var linksCmd = &cobra.Command{
 Collects links embedded in the content of your saved bookmarks.`,
 	PreRun: requireClient,
 	Run: func(cmd *cobra.Command, args []string) {
-		st, err := client.GetBookmarks(cmd.Context(), &mastodon.Pagination{Limit: limit})
+		st, err := mClient.GetBookmarks(cmd.Context(), &mastodon.Pagination{Limit: limit})
 		cobra.CheckErr(err)
 
 		outputLinks(st)
@@ -60,7 +62,7 @@ func outputLinks(status []*mastodon.Status) {
 			if href, ok := s.Attr("href"); ok {
 
 				if strings.HasPrefix(href, origin) {
-					debug("skipping internal href: ", href)
+					log.Debug("skipping internal href: ", href)
 					return
 				}
 
