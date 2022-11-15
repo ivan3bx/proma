@@ -129,6 +129,6 @@ func initConfig() {
 
 		mClient = mastodon.NewClient(clientConfig)
 	} else {
-		log.Errorf("Credentials missing for server '%s'\n", serverName)
+		log.Warnf("Credentials missing for server '%s'\n", serverName)
 	}
 }
