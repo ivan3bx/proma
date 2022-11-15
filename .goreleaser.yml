@@ -1,0 +1,48 @@
+before:
+  hooks:
+    - go mod tidy
+builds:
+  - id: proma
+    main: ./main.go
+    binary: "proma"
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      # - arm64
+    ignore:
+      - goos: darwin
+        goarch: 386
+      - goos: windows
+archives:
+    - replacements:
+        darwin: Darwin
+        linux: Linux
+        windows: Windows
+        amd64: x86_64
+checksum:
+  name_template: 'checksums.txt'
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^(?i)wip\b'
+      - '^docs:'
+      - '^test:'
+
+release:
+  draft: true  # do not auto-publish
+  github:
+    owner: ivan3bx
+    name: proma
+  header: |
+    ## Proma release ({{ .Date }})
