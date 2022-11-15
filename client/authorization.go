@@ -43,9 +43,9 @@ func RegisterNewClient(serverName string) (*mastodon.Client, error) {
 			done <- os.Interrupt
 		})
 
-		log.Debug("listening for auth response on port %v", listenerPort)
+		log.Debugf("listening for auth response on port %v", listenerPort)
 		if err := http.Serve(listener, mux); err != nil && err != http.ErrServerClosed {
-			log.Fatal("authentication listener failed to start: %s\n", err)
+			log.Fatalf("authentication listener failed to start: %s\n", err)
 		}
 	}()
 
@@ -64,8 +64,8 @@ func RegisterNewClient(serverName string) (*mastodon.Client, error) {
 		return nil, err
 	}
 
-	log.Debug("client-id    : %s", app.ClientID)
-	log.Debug("client-secret: %s", app.ClientSecret)
+	log.Debugf("client-id    : %s", app.ClientID)
+	log.Debugf("client-secret: %s", app.ClientSecret)
 
 	if err := browser.OpenURL(app.AuthURI); err != nil {
 		return nil, err
