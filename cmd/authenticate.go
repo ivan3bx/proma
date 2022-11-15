@@ -1,5 +1,5 @@
 /*
-Copyright © 2022 NAME HERE <EMAIL ADDRESS>
+Copyright © 2022 Ivan Moscoso
 */
 package cmd
 
@@ -48,6 +48,12 @@ Examples:
 
 func init() {
 	rootCmd.AddCommand(authenticateCmd)
+}
+
+func anonymousClientAllowed(cmd *cobra.Command, args []string) {
+	if mClient == nil {
+		mClient = client.NewAnonymousClient(serverName)
+	}
 }
 
 func requireClient(cmd *cobra.Command, args []string) {
