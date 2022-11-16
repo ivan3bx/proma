@@ -5,6 +5,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/signal"
 	"syscall"
@@ -38,7 +39,12 @@ proma collect -t outage -i 2 -s mastodon.social
 			w  *stats.Server
 		)
 
-		db = sqlx.MustConnect("sqlite3", "proma.db")
+		if _, err := os.Stat("proma.db"); errors.Is(err, os.ErrNotExist) {
+			db = initDB(db)
+		} else {
+			db = sqlx.MustOpen("sqlite3", "proma.db")
+		}
+
 		c = stats.NewCollector(mClient, db)
 		c.Start(cmd.Context(), tagNames)
 
@@ -60,6 +66,11 @@ func init() {
 	rootCmd.AddCommand(collectCmd)
 	collectCmd.Flags().StringSliceVarP(&tagNames, "tags", "t", []string{}, "tag names")
 	collectCmd.Flags().BoolVar(&webServer, "http", false, "display stats page (http://localhost:8080/)")
+}
+
+func initDB() *sqlx.DB {
+	db := sqlx.MustOpen("sqlite3", "proma.db")
+	return db
 }
 
 // waitForInterrupt will block until either user interrupt is detected,
