@@ -40,13 +40,12 @@ proma collect -t outage -i 2 -s mastodon.social
 
 		db = sqlx.MustConnect("sqlite3", "proma.db")
 		c = stats.NewCollector(mClient, db)
+		c.Start(cmd.Context(), tagNames)
 
 		if webServer {
 			w = stats.NewServer(cmd.Context(), db)
 			w.Start()
 		}
-
-		c.Start(tagNames)
 
 		waitForInterrupt(cmd.Context(), func() {
 			c.Stop()

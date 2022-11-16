@@ -9,7 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
-	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 type Server struct {
@@ -35,13 +35,13 @@ func NewServer(ctx context.Context, db *sqlx.DB) *Server {
 }
 
 func (s *Server) Start() {
-	logrus.Infof("http server is available at http://%s/\n", s.web.Addr)
+	log.Infof("http server is available at http://%s/\n", s.web.Addr)
 
 	go func() {
 		if err := s.web.ListenAndServe(); errors.Is(err, http.ErrServerClosed) {
-			logrus.Info("http server stopped")
+			log.Info("http server stopped")
 		} else {
-			logrus.Errorf("http server stopped with error: %v\n", err)
+			log.Errorf("http server stopped with error: %v\n", err)
 		}
 	}()
 }
@@ -55,7 +55,7 @@ func (s *Server) Shutdown() {
 		}
 	}()
 
-	logrus.Debug("http server shutting down")
+	log.Debug("http server shutting down")
 	s.web.Shutdown(ctx)
 }
 
