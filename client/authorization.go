@@ -16,6 +16,16 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// NewAnonymousClient returns a client capable of only returning data using
+// public endpoints. Any authenticated calls through this client will fail.
+func NewAnonymousClient(serverName string) *mastodon.Client {
+	return mastodon.NewClient(&mastodon.Config{
+		Server: serverURL(serverName),
+	})
+}
+
+// RegisterNewClient registers a new authenticated client by starting a local
+// auth server, opening a browser and capturing client id & secret for this user.
 func RegisterNewClient(serverName string) (*mastodon.Client, error) {
 	done := make(chan os.Signal, 1)
 
@@ -54,7 +64,7 @@ func RegisterNewClient(serverName string) (*mastodon.Client, error) {
 
 	app, err := mastodon.RegisterApp(context.Background(), &mastodon.AppConfig{
 		Server:       serverURL(serverName),
-		ClientName:   "Links From Bookmarks",
+		ClientName:   "Proma for Mastodon",
 		Scopes:       "read:bookmarks read:favourites",
 		Website:      "https://github.com/ivan3bx/proma",
 		RedirectURIs: fmt.Sprintf("http://%s/auth", listenerHost),
