@@ -40,25 +40,32 @@ proma collect -t outage -i 2 -s mastodon.social
 		)
 
 		if _, err := os.Stat("proma.db"); errors.Is(err, os.ErrNotExist) {
-			db = initDB(db)
+			db = initDB()
 		} else {
 			db = sqlx.MustOpen("sqlite3", "proma.db")
 		}
 
 		c = stats.NewCollector(mClient, db)
-		c.Start(cmd.Context(), tagNames)
 
 		if webServer {
+			// start collector in the background
+			c.Start(cmd.Context(), tagNames)
+
+			// start web server
 			w = stats.NewServer(cmd.Context(), db)
 			w.Start()
+
+			waitForInterrupt(cmd.Context(), func() {
+				c.Stop()
+				if w != nil {
+					w.Shutdown()
+				}
+			})
+
+		} else {
+			c.Collect(cmd.Context(), tagNames)
 		}
 
-		waitForInterrupt(cmd.Context(), func() {
-			c.Stop()
-			if w != nil {
-				w.Shutdown()
-			}
-		})
 	},
 }
 
@@ -70,6 +77,43 @@ func init() {
 
 func initDB() *sqlx.DB {
 	db := sqlx.MustOpen("sqlite3", "proma.db")
+
+	schema := `
+		CREATE TABLE tags (
+			id INTEGER PRIMARY KEY,
+			name TEXT NOT NULL
+		);
+
+		CREATE UNIQUE INDEX idx_tags_name ON tags (name);
+
+		CREATE TABLE posts (
+			id INTEGER PRIMARY KEY,
+			post_id TEXT NOT NULL,
+			account_id TEXT NOT NULL,
+			server TEXT NOT NULL,
+			uri TEXT NOT NULL,
+			lang TEXT DEFAULT 'en' NOT NULL,
+			content_html TEXT,
+			content_text TEXT,
+			created_at TEXT
+		);
+
+		CREATE UNIQUE INDEX idx_posts_uri ON posts (uri);
+
+		CREATE TABLE posts_tags (
+			post_id INTEGER NOT NULL,
+			tag_id INTEGER NOT NULL,
+			PRIMARY KEY (post_id, tag_id)
+		);
+
+		CREATE VIRTUAL TABLE content_index USING FTS5 (
+			post_id,
+			content
+		);
+	`
+
+	db.MustExec(schema)
+
 	return db
 }
 

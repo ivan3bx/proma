@@ -15,7 +15,7 @@ type TagTimeline func(tag string) ([]*mastodon.Status, error)
 func ServerFeed(ctx context.Context, client *mastodon.Client) TagTimeline {
 	return func(tag string) ([]*mastodon.Status, error) {
 		log.Debugf("fetching timeline for tag: '%v'", tag)
-		return client.GetTimelineHashtag(ctx, tag, true, nil)
+		return client.GetTimelineHashtag(ctx, tag, false, nil)
 	}
 }
 

@@ -2,14 +2,14 @@ package stats
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
+	"database/sql"
 	"time"
 
 	"github.com/ivan3bx/proma/client"
 	"github.com/jmoiron/sqlx"
 	"github.com/mattn/go-mastodon"
 	_ "github.com/mattn/go-sqlite3"
+
 	log "github.com/sirupsen/logrus"
 )
 
@@ -38,18 +38,76 @@ func (c *Collector) Collect(ctx context.Context, tagNames []string) error {
 		items, err := timelineFeed(tag)
 
 		if err != nil {
-			log.Error("error collecting data: %v\n", err)
+			log.Errorf("error collecting data: %v\n", err)
 			return err
 		}
 
-		out, err := json.MarshalIndent(&items, "", "  ")
+		for _, item := range items {
+			{
+				var exists bool
 
-		if err != nil {
-			log.Error("error marshalling JSON: %v\n", err)
-			return err
+				err := c.db.Get(&exists, "SELECT 1 FROM posts WHERE uri = ?", item.URI)
+
+				if err != nil && err != sql.ErrNoRows {
+					return err
+				}
+
+				if exists {
+					log.Debug("skipping row")
+					continue
+				}
+
+				postRes := sqlx.MustExec(c.db, `
+				INSERT INTO posts (
+					post_id,
+					account_id,
+					server,
+					uri,
+					lang,
+					content_html,
+					created_at
+				) VALUES (
+					?, ?, ?, ?, ?, ?, ?
+				);`,
+					item.ID,
+					item.Account.ID,
+					c.client.Config.Server,
+					item.URI,
+					coalesceString("en", item.Language),
+					item.Content,
+					item.CreatedAt,
+				)
+
+				postID, err := postRes.LastInsertId()
+
+				if err != nil {
+					return err
+				}
+
+				log.Debug("inserted post")
+
+				for _, tag := range item.Tags {
+					sqlx.MustExec(c.db, `INSERT OR IGNORE INTO tags (name) VALUES (?);`, tag.Name)
+
+					sqlx.MustExec(c.db, `
+					INSERT INTO posts_tags (
+						post_id,
+						tag_id
+					) VALUES (
+						?, (SELECT id FROM tags WHERE name = ?)
+					);`, postID, tag.Name)
+				}
+			}
 		}
 
-		fmt.Println(string(out))
+		// out, err := json.MarshalIndent(&items, "", "  ")
+
+		// if err != nil {
+		// 	log.Error("error marshalling JSON: %v\n", err)
+		// 	return err
+		// }
+
+		// fmt.Println(string(out))
 	}
 
 	return nil
@@ -65,17 +123,16 @@ func (c *Collector) Start(ctx context.Context, tagNames []string) {
 		ctx, cancel := context.WithCancel(ctx)
 		tick := time.NewTicker(c.sampleRate)
 
-		defer func() {
-			tick.Stop()
-			c.stop <- struct{}{} // signals back to Stop()
-		}()
+		defer tick.Stop()
+		defer cancel()
 
 		for {
 			log.Debug("collector run starting")
 
 			if err := c.Collect(ctx, tagNames); err != nil {
 				log.Errorf("collector failed with error: %v", err)
-				c.stop <- struct{}{}
+				tick.Stop()
+				c.Stop()
 			}
 
 			select {
@@ -83,7 +140,7 @@ func (c *Collector) Start(ctx context.Context, tagNames []string) {
 				// proceed through next iteration
 			case <-c.stop:
 				log.Debug("collector shutting down..")
-				cancel()
+				c.stop <- struct{}{} // signals back to Stop()
 				return
 			}
 		}
@@ -105,4 +162,11 @@ func (c *Collector) Stop() {
 	}
 
 	cancel()
+}
+
+func coalesceString(defaultVal, val string) string {
+	if val == "" {
+		return defaultVal
+	}
+	return val
 }
