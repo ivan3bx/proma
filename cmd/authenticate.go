@@ -30,17 +30,17 @@ Examples:
   and saves an AccessToken to the config file.
 `,
 	Run: func(cmd *cobra.Command, args []string) {
-		log.Infof("Server: %s\n", yellow(serverName))
+		log.Infof("Server: %s\n", yellow(defaultServer))
 		log.Infof("Re-run this command with '-server' to use a different server.\n\n")
 		log.Infof("This will launch a browser window in order to authorize this app.\n")
 		log.Infof("Hit <Enter> to continue...")
 		bufio.NewReader(os.Stdin).ReadBytes('\n')
 
 		var err error
-		c, err := client.RegisterNewClient(serverName)
+		c, err := client.RegisterNewClient(defaultServer)
 		cobra.CheckErr(err)
 
-		v.Set(serverName, c.Config)
+		v.Set(defaultServer, c.Config)
 		cobra.CheckErr(v.WriteConfig())
 
 	},
@@ -52,7 +52,7 @@ func init() {
 
 func anonymousClientAllowed(cmd *cobra.Command, args []string) {
 	if mClient == nil {
-		mClient = client.NewAnonymousClient(serverName)
+		mClient = client.NewAnonymousClient(defaultServer)
 	}
 }
 

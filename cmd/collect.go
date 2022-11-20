@@ -14,7 +14,6 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/mattn/go-mastodon"
 	_ "github.com/mattn/go-sqlite3"
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
@@ -43,7 +42,7 @@ proma collect -t outage -i 2 -s mastodon.social
 
 		db = initDB()
 
-		for _, s := range getTargetServers(cmd) {
+		for _, s := range allServers {
 			clients = append(clients, client.NewAnonymousClient(s))
 		}
 
@@ -72,7 +71,6 @@ proma collect -t outage -i 2 -s mastodon.social
 
 func init() {
 	rootCmd.AddCommand(collectCmd)
-	collectCmd.Flags().StringSlice("server", []string{}, "servers to collect from (comma delimited)")
 	collectCmd.Flags().StringSliceVarP(&tagNames, "tags", "t", []string{}, "tag names")
 	collectCmd.Flags().BoolVar(&webServer, "http", false, "display stats page (http://localhost:8080/)")
 }
@@ -128,25 +126,6 @@ func initDB() *sqlx.DB {
 	db.MustExec(schema)
 
 	return db
-}
-
-// getTargetServers returns a list of servers if specified as a flag
-// or els edefaults to the root command's default "server" value.
-func getTargetServers(cmd *cobra.Command) []string {
-	var (
-		servers []string
-		err     error
-	)
-	servers, err = cmd.Flags().GetStringSlice("server")
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if len(servers) == 0 {
-		servers = []string{serverName}
-	}
-	return servers
 }
 
 // waitForInterrupt will block until either user interrupt is detected,

@@ -60,17 +60,18 @@ func Execute() {
 }
 
 var (
-	v          *viper.Viper
-	serverName string
-	cfgFile    string
-	verbose    bool
-	mClient    *mastodon.Client
+	v             *viper.Viper
+	defaultServer string
+	allServers    []string
+	cfgFile       string
+	verbose       bool
+	mClient       *mastodon.Client
 )
 
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file (default is $HOME/.proma.json)")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose mode")
-	rootCmd.PersistentFlags().StringVarP(&serverName, "server", "s", "mastodon.social", "server name")
+	rootCmd.PersistentFlags().StringSliceVarP(&allServers, "servers", "s", []string{"mastodon.social"}, "server names to check")
 
 	cobra.OnInitialize(initLogging, initConfig)
 }
@@ -112,13 +113,17 @@ func initConfig() {
 
 	log.Debugf("reading config file: %v", v.ConfigFileUsed())
 
-	if len(v.AllSettings()) > 0 && !rootCmd.Flags().Changed("server") {
-		serverName = maps.Keys(v.AllSettings())[0]
-		log.Info("using default serverName: ", serverName)
+	// default server taken from command flag
+	defaultServer = allServers[0]
+
+	// default server is overridden by any previous configuration
+	if len(v.AllSettings()) > 0 && !rootCmd.Flags().Changed("servers") {
+		defaultServer = maps.Keys(v.AllSettings())[0]
+		log.Info("using default serverName: ", defaultServer)
 	}
 
-	if v.InConfig(serverName) {
-		configValues := v.GetStringMapString(serverName)
+	if v.InConfig(defaultServer) {
+		configValues := v.GetStringMapString(defaultServer)
 
 		clientConfig := &mastodon.Config{
 			Server:       configValues["server"],
@@ -129,6 +134,6 @@ func initConfig() {
 
 		mClient = mastodon.NewClient(clientConfig)
 	} else {
-		log.Warnf("Credentials missing for server '%s'\n", serverName)
+		log.Warnf("Credentials missing for default server '%s'\n", defaultServer)
 	}
 }
