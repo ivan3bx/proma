@@ -5,15 +5,15 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"os"
 	"os/signal"
 	"syscall"
 
-	_ "github.com/mattn/go-sqlite3"
-
+	"github.com/ivan3bx/proma/client"
 	"github.com/ivan3bx/proma/stats"
 	"github.com/jmoiron/sqlx"
+	_ "github.com/mattn/go-sqlite3"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
@@ -39,44 +39,54 @@ proma collect -t outage -i 2 -s mastodon.social
 			w  *stats.Server
 		)
 
-		if _, err := os.Stat("proma.db"); errors.Is(err, os.ErrNotExist) {
-			db = initDB()
-		} else {
-			db = sqlx.MustOpen("sqlite3", "proma.db")
+		db = initDB()
+
+		for _, s := range getTargetServers(cmd) {
+			log.Info("collecting from server: ", s)
+			c = stats.NewCollector(client.NewAnonymousClient(s), db)
+
+			if webServer {
+				// start collector in the background
+				c.Start(cmd.Context(), tagNames)
+
+				// start web server
+				w = stats.NewServer(cmd.Context(), db)
+				w.Start()
+
+				waitForInterrupt(cmd.Context(), func() {
+					c.Stop()
+					if w != nil {
+						w.Shutdown()
+					}
+				})
+
+			} else {
+				c.Collect(cmd.Context(), tagNames)
+			}
 		}
-
-		c = stats.NewCollector(mClient, db)
-
-		if webServer {
-			// start collector in the background
-			c.Start(cmd.Context(), tagNames)
-
-			// start web server
-			w = stats.NewServer(cmd.Context(), db)
-			w.Start()
-
-			waitForInterrupt(cmd.Context(), func() {
-				c.Stop()
-				if w != nil {
-					w.Shutdown()
-				}
-			})
-
-		} else {
-			c.Collect(cmd.Context(), tagNames)
-		}
-
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(collectCmd)
+	collectCmd.Flags().StringSlice("server", []string{}, "servers to collect from (comma delimited)")
 	collectCmd.Flags().StringSliceVarP(&tagNames, "tags", "t", []string{}, "tag names")
 	collectCmd.Flags().BoolVar(&webServer, "http", false, "display stats page (http://localhost:8080/)")
 }
 
 func initDB() *sqlx.DB {
-	db := sqlx.MustOpen("sqlite3", "proma.db")
+	var (
+		db  *sqlx.DB
+		err error
+	)
+
+	if _, err := os.Stat("proma.db"); err == nil {
+		return sqlx.MustOpen("sqlite3", "proma.db")
+	}
+
+	if db, err = sqlx.Open("sqlite3", "proma.db"); err != nil {
+		panic(err)
+	}
 
 	schema := `
 		CREATE TABLE tags (
@@ -115,6 +125,25 @@ func initDB() *sqlx.DB {
 	db.MustExec(schema)
 
 	return db
+}
+
+// getTargetServers returns a list of servers if specified as a flag
+// or els edefaults to the root command's default "server" value.
+func getTargetServers(cmd *cobra.Command) []string {
+	var (
+		servers []string
+		err     error
+	)
+	servers, err = cmd.Flags().GetStringSlice("server")
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if len(servers) == 0 {
+		servers = []string{serverName}
+	}
+	return servers
 }
 
 // waitForInterrupt will block until either user interrupt is detected,
