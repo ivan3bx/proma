@@ -14,16 +14,16 @@ import (
 )
 
 type Collector struct {
-	client     *mastodon.Client
+	clients    []*mastodon.Client
 	db         *sqlx.DB
 	sampleRate time.Duration
 	stop       chan struct{}
 }
 
-func NewCollector(client *mastodon.Client, db *sqlx.DB) *Collector {
+func NewCollector(clients []*mastodon.Client, db *sqlx.DB) *Collector {
 	return &Collector{
 		db:         db,
-		client:     client,
+		clients:    clients,
 		sampleRate: time.Minute * 1,
 	}
 }
@@ -32,32 +32,34 @@ func NewCollector(client *mastodon.Client, db *sqlx.DB) *Collector {
 // and imports it to the database configured on the collector.
 // It returns an error returned by the server or nil if successful.
 func (c *Collector) Collect(ctx context.Context, tagNames []string) error {
-	timelineFeed := client.ServerFeed(ctx, c.client)
+	for _, cl := range c.clients {
+		log.Debug("collecting from server: ", cl.Config.Server)
+		timelineFeed := client.ServerFeed(ctx, cl)
 
-	for _, tag := range tagNames {
-		items, err := timelineFeed(tag)
+		for _, tag := range tagNames {
+			items, err := timelineFeed(tag)
 
-		if err != nil {
-			log.Errorf("error collecting data: %v\n", err)
-			return err
-		}
+			if err != nil {
+				log.Errorf("error collecting data: %v\n", err)
+				return err
+			}
 
-		for _, item := range items {
-			{
-				var exists bool
+			for _, item := range items {
+				{
+					var exists bool
 
-				err := c.db.Get(&exists, "SELECT 1 FROM posts WHERE uri = ?", item.URI)
+					err := c.db.Get(&exists, "SELECT 1 FROM posts WHERE uri = ?", item.URI)
 
-				if err != nil && err != sql.ErrNoRows {
-					return err
-				}
+					if err != nil && err != sql.ErrNoRows {
+						return err
+					}
 
-				if exists {
-					log.Debug("skipping row")
-					continue
-				}
+					if exists {
+						log.Debug("skipping row")
+						continue
+					}
 
-				postRes := sqlx.MustExec(c.db, `
+					postRes := sqlx.MustExec(c.db, `
 				INSERT INTO posts (
 					post_id,
 					account_id,
@@ -69,47 +71,38 @@ func (c *Collector) Collect(ctx context.Context, tagNames []string) error {
 				) VALUES (
 					?, ?, ?, ?, ?, ?, ?
 				);`,
-					item.ID,
-					item.Account.ID,
-					c.client.Config.Server,
-					item.URI,
-					coalesceString("en", item.Language),
-					item.Content,
-					item.CreatedAt,
-				)
+						item.ID,
+						item.Account.ID,
+						cl.Config.Server,
+						item.URI,
+						coalesceString("en", item.Language),
+						item.Content,
+						item.CreatedAt,
+					)
 
-				postID, err := postRes.LastInsertId()
+					postID, err := postRes.LastInsertId()
 
-				if err != nil {
-					return err
-				}
+					if err != nil {
+						return err
+					}
 
-				log.Debug("inserted post")
+					log.Debug("inserted post")
 
-				for _, tag := range item.Tags {
-					sqlx.MustExec(c.db, `INSERT OR IGNORE INTO tags (name) VALUES (?);`, tag.Name)
+					for _, tag := range item.Tags {
+						sqlx.MustExec(c.db, `INSERT OR IGNORE INTO tags (name) VALUES (?);`, tag.Name)
 
-					sqlx.MustExec(c.db, `
+						sqlx.MustExec(c.db, `
 					INSERT INTO posts_tags (
 						post_id,
 						tag_id
 					) VALUES (
 						?, (SELECT id FROM tags WHERE name = ?)
 					);`, postID, tag.Name)
+					}
 				}
 			}
 		}
-
-		// out, err := json.MarshalIndent(&items, "", "  ")
-
-		// if err != nil {
-		// 	log.Error("error marshalling JSON: %v\n", err)
-		// 	return err
-		// }
-
-		// fmt.Println(string(out))
 	}
-
 	return nil
 }
 

@@ -12,6 +12,7 @@ import (
 	"github.com/ivan3bx/proma/client"
 	"github.com/ivan3bx/proma/stats"
 	"github.com/jmoiron/sqlx"
+	"github.com/mattn/go-mastodon"
 	_ "github.com/mattn/go-sqlite3"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -34,35 +35,37 @@ proma collect -t outage -i 2 -s mastodon.social
 	PreRun: anonymousClientAllowed,
 	Run: func(cmd *cobra.Command, args []string) {
 		var (
-			db *sqlx.DB
-			c  *stats.Collector
-			w  *stats.Server
+			clients []*mastodon.Client
+			db      *sqlx.DB
+			c       *stats.Collector
+			w       *stats.Server
 		)
 
 		db = initDB()
 
 		for _, s := range getTargetServers(cmd) {
-			log.Info("collecting from server: ", s)
-			c = stats.NewCollector(client.NewAnonymousClient(s), db)
+			clients = append(clients, client.NewAnonymousClient(s))
+		}
 
-			if webServer {
-				// start collector in the background
-				c.Start(cmd.Context(), tagNames)
+		c = stats.NewCollector(clients, db)
 
-				// start web server
-				w = stats.NewServer(cmd.Context(), db)
-				w.Start()
+		if webServer {
+			// start collector in the background
+			c.Start(cmd.Context(), tagNames)
 
-				waitForInterrupt(cmd.Context(), func() {
-					c.Stop()
-					if w != nil {
-						w.Shutdown()
-					}
-				})
+			// start web server
+			w = stats.NewServer(cmd.Context(), db)
+			w.Start()
 
-			} else {
-				c.Collect(cmd.Context(), tagNames)
-			}
+			waitForInterrupt(cmd.Context(), func() {
+				c.Stop()
+				if w != nil {
+					w.Shutdown()
+				}
+			})
+
+		} else {
+			c.Collect(cmd.Context(), tagNames)
 		}
 	},
 }
