@@ -26,8 +26,8 @@ var webServer bool
 // collectCmd represents the collect command
 var collectCmd = &cobra.Command{
 	Use:   "collect",
-	Short: "Collects and aggregates tagged posts over time",
-	Long: `Collects posts for the provided tag(s) and aggregates statistics over time.
+	Short: "Collects and aggregates tagged posts",
+	Long: `Collects posts for the provided tag(s) and aggregates statistics.
 
 Example:
 
