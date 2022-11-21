@@ -5,6 +5,8 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,6 +16,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/mattn/go-mastodon"
 	_ "github.com/mattn/go-sqlite3"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
@@ -40,7 +43,8 @@ proma collect -t outage -i 2 -s mastodon.social
 			w       *stats.Server
 		)
 
-		db = initDB()
+		dbName, _ := cmd.Flags().GetString("database")
+		db = initDB(dbName)
 
 		for _, s := range allServers {
 			clients = append(clients, client.NewAnonymousClient(s))
@@ -64,30 +68,56 @@ proma collect -t outage -i 2 -s mastodon.social
 			})
 
 		} else {
+			// Collect data from any configured servers
 			c.Collect(cmd.Context(), tagNames)
+
+			// Generate and print a report
+			stats, err := c.Report(cmd.Context(), tagNames)
+
+			if err != nil {
+				panic(err)
+			}
+
+			if len(stats) == 0 {
+				fmt.Fprintln(os.Stderr, "no results")
+				return
+			}
+
+			enc := json.NewEncoder(cmd.OutOrStdout())
+			enc.SetIndent("", "  ")
+
+			if err := enc.Encode(stats); err != nil {
+				panic(err)
+			}
 		}
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(collectCmd)
+	collectCmd.Flags().StringP("database", "d", "", "database file to store results (default in-memory)")
 	collectCmd.Flags().StringSliceVarP(&tagNames, "tags", "t", []string{}, "tag names")
 	collectCmd.Flags().BoolVar(&webServer, "http", false, "display stats page (http://localhost:8080/)")
 }
 
-func initDB() *sqlx.DB {
+func initDB(dbName string) *sqlx.DB {
 	var (
-		db  *sqlx.DB
-		err error
+		db *sqlx.DB
 	)
 
-	if _, err := os.Stat("proma.db"); err == nil {
-		return sqlx.MustOpen("sqlite3", "proma.db")
+	if dbName != "" {
+		// returns DB if exists
+		if _, err := os.Stat(dbName); err == nil {
+			log.Debugf("using existing db: %s\n", dbName)
+			return sqlx.MustOpen("sqlite3", dbName)
+		}
+	} else {
+		// default to in-memory db
+		dbName = ":memory:"
 	}
 
-	if db, err = sqlx.Open("sqlite3", "proma.db"); err != nil {
-		panic(err)
-	}
+	log.Debugf("using database: %s\n", dbName)
+	db = sqlx.MustOpen("sqlite3", dbName)
 
 	schema := `
 		CREATE TABLE tags (
@@ -117,10 +147,11 @@ func initDB() *sqlx.DB {
 			PRIMARY KEY (post_id, tag_id)
 		);
 
-		CREATE VIRTUAL TABLE content_index USING FTS5 (
-			post_id,
-			content
-		);
+		-- index relies on sqlite3 FTS extension (go run .. --tags=fts5)
+		-- CREATE VIRTUAL TABLE content_index USING FTS5 (
+		--	post_id,
+		--	content
+		-- );
 	`
 
 	db.MustExec(schema)

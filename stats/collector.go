@@ -33,7 +33,7 @@ func NewCollector(clients []*mastodon.Client, db *sqlx.DB) *Collector {
 // It returns an error returned by the server or nil if successful.
 func (c *Collector) Collect(ctx context.Context, tagNames []string) error {
 	for _, cl := range c.clients {
-		log.Debug("collecting from server: ", cl.Config.Server)
+		log.Info("collecting from server: ", cl.Config.Server)
 		timelineFeed := client.ServerFeed(ctx, cl)
 
 		for _, tag := range tagNames {
@@ -155,6 +155,46 @@ func (c *Collector) Stop() {
 	}
 
 	cancel()
+}
+
+// Report generates a list of posts matching one or more of the provided tagNames.
+// It returns an error if the underlying SQL query fails.
+func (c *Collector) Report(ctx context.Context, tagNames []string) ([]*Status, error) {
+	var results []*Status
+
+	query, args, err := sqlx.In(`
+		SELECT
+		created_at, uri, lang, content_html as content,
+		(
+			SELECT group_concat(tt.name)
+			FROM posts_tags ptt
+			JOIN tags tt ON tt.id = ptt.tag_id
+			WHERE post_id = p.id
+			ORDER BY tt.name
+		) tag_list
+		FROM
+			posts p
+		INNER JOIN
+			posts_tags pt ON pt.post_id = p.id
+		INNER JOIN
+			tags tag ON tag.id = pt.tag_id
+		WHERE
+			tag.name IN (?)
+		AND
+			created_at > date('now', '-2 days')
+		ORDER BY created_at DESC;
+	`, tagNames)
+
+	if err != nil {
+		return nil, err
+	}
+
+	query = c.db.Rebind(query)
+
+	if err := c.db.Select(&results, query, args...); err != nil {
+		return nil, err
+	}
+	return results, nil
 }
 
 func coalesceString(defaultVal, val string) string {

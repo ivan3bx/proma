@@ -11,7 +11,8 @@ builds:
       - -s -w
       - -X main.version={{.Version}}
     flags:
-      - --tags=fts5
+      # needed to enable sqlite's FTS extension
+      # - --tags=fts5
     goos:
       - linux
       - darwin
